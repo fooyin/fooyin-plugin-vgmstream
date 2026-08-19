@@ -22,8 +22,13 @@
 #include <core/coresettings.h>
 #include <core/engine/audioinput.h>
 
-extern "C" {
+extern "C"
+{
+#if __has_include(<vgmstream/libvgmstream.h>)
 #include <vgmstream/libvgmstream.h>
+#else
+#include <libvgmstream.h>
+#endif
 }
 
 namespace Fooyin::VGMStream {
