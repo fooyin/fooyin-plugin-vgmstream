@@ -18,6 +18,11 @@ if(VGMSTREAM_FOUND)
     message(STATUS "Using system vgmstream")
 elseif(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/CMakeLists.txt")
     message(STATUS "Using 3rd-party vgmstream")
+
+    set(BUILD_CLI OFF CACHE BOOL "Build VGMStream CLI" FORCE)
+    set(BUILD_V123 OFF CACHE BOOL "Build vgmstream123" FORCE)
+    set(BUILD_AUDACIOUS OFF CACHE BOOL "Build Audacious plugin" FORCE)
+
     add_subdirectory(${CMAKE_SOURCE_DIR}/3rdparty/vgmstream vgmstream EXCLUDE_FROM_ALL)
     add_library(VGMStream::VGMStream ALIAS libvgmstream)
     set(VGMSTREAM_TARGET VGMStream::VGMStream)

@@ -1,7 +1,6 @@
 # fooyin VGMStream input plugin
 
-An input plugin for [fooyin](https://www.fooyin.org/) that uses [VGMStream](https://github.com/vgmstream/vgmstream)
-to play streamed video game music audio.
+An input plugin for [fooyin](https://www.fooyin.org/) that uses [VGMStream](https://github.com/vgmstream/vgmstream) to play streamed video game audio.
 
 ## Installation
 
