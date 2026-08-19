@@ -14,12 +14,11 @@ jobs:
   build:
     name: Build fooyin and plugin
     runs-on: ubuntu-latest
-    container: ubuntu:22.04
+    container: ubuntu:24.04
 
     env:
       FOOYIN_REF: master
       FOOYIN_PREFIX: ${{ github.workspace }}/fooyin-install
-      QT_VERSION: 6.4.3
 
     steps:
       - name: Dependencies
@@ -30,6 +29,9 @@ jobs:
             cmake \
             ninja-build \
             libasound2-dev \
+            qt6-base-dev \
+            qt6-svg-dev \
+            qt6-tools-dev \
             libavcodec-dev \
             libavfilter-dev \
             libavformat-dev \
@@ -38,14 +40,6 @@ jobs:
             libicu-dev \
             libtag1-dev \
             zlib1g-dev
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ env.QT_VERSION }}
-          archives: qtbase qtsvg qttools
-          cache: true
-          install-deps: 'true'
 
       - name: Checkout plugin
         uses: actions/checkout@v7
