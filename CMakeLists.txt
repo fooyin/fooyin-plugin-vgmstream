@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
 project(
     vgmstream
     VERSION 1.0.1
@@ -14,7 +16,7 @@ set(CMAKE_AUTOUIC ON)
 find_package(Fooyin)
 find_package(VGMStream QUIET MODULE)
 
-if(VGMSTREAM_FOUND)
+if(VGMStream_FOUND)
     message(STATUS "Using system vgmstream")
 elseif(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/CMakeLists.txt")
     message(STATUS "Using 3rd-party vgmstream")
