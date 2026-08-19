@@ -24,6 +24,10 @@ elseif(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/CMakeLists.txt")
     set(BUILD_AUDACIOUS OFF CACHE BOOL "Build Audacious plugin" FORCE)
 
     add_subdirectory(${CMAKE_SOURCE_DIR}/3rdparty/vgmstream vgmstream EXCLUDE_FROM_ALL)
+    target_include_directories(
+        libvgmstream
+        INTERFACE "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/src"
+    )
     add_library(VGMStream::VGMStream ALIAS libvgmstream)
     set(VGMSTREAM_TARGET VGMStream::VGMStream)
 else()
