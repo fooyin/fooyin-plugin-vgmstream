@@ -30,8 +30,10 @@ jobs:
             ninja-build \
             libasound2-dev \
             libavcodec-dev \
+            libavfilter-dev \
             libavformat-dev \
             libavutil-dev \
+            libswresample-dev \
             libicu-dev \
             libtag1-dev \
             zlib1g-dev
