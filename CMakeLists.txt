@@ -31,7 +31,6 @@ elseif(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/CMakeLists.txt")
         INTERFACE "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/src"
     )
     add_library(VGMStream::VGMStream ALIAS libvgmstream)
-    set(VGMSTREAM_TARGET VGMStream::VGMStream)
 else()
     message(STATUS "vgmstream not found; skipping vgmstream plugin")
     return()
@@ -42,7 +41,7 @@ create_fooyin_plugin(
     JSON_IN src/vgmstream.json.in
     DEPENDS Fooyin::Core
             Fooyin::Gui
-            ${VGMSTREAM_TARGET}
+            VGMStream::VGMStream
     SOURCES src/vgmstreamdefs.h
             src/vgmstreaminput.cpp
             src/vgmstreaminput.h
