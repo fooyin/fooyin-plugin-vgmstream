@@ -29,6 +29,7 @@ jobs:
             git \
             cmake \
             ninja-build \
+            pkg-config \
             libasound2-dev \
             qt6-base-dev \
             qt6-svg-dev \
@@ -36,6 +37,7 @@ jobs:
             libavcodec-dev \
             libavfilter-dev \
             libavformat-dev \
+            libavdevice-dev \
             libavutil-dev \
             libswresample-dev \
             libicu-dev \
