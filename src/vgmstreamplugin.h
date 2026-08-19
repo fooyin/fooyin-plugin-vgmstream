@@ -27,7 +27,8 @@ namespace Fooyin::VGMStream {
 class VGMStreamPlugin : public QObject,
                         public Plugin,
                         public InputPlugin,
-                        public PluginConfigGuiPlugin {
+                        public PluginConfigGuiPlugin
+{
     Q_OBJECT
     Q_PLUGIN_METADATA(IID "org.fooyin.fooyin.plugin" FILE "vgmstream.json")
     Q_INTERFACES(Fooyin::Plugin Fooyin::InputPlugin Fooyin::PluginConfigGuiPlugin)

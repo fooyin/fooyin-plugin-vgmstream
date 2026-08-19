@@ -32,17 +32,19 @@ extern "C"
 }
 
 namespace Fooyin::VGMStream {
-struct VGMStreamDeleter {
+struct VGMStreamDeleter
+{
     void operator()(libvgmstream_t* stream) const
     {
-        if (stream) {
+        if(stream) {
             libvgmstream_free(stream);
         }
     }
 };
 using VGMStreamPtr = std::unique_ptr<libvgmstream_t, VGMStreamDeleter>;
 
-class VGMStreamDecoder : public AudioDecoder {
+class VGMStreamDecoder : public AudioDecoder
+{
 public:
     VGMStreamDecoder();
 
@@ -81,7 +83,8 @@ private:
     size_t m_bufferRemaining;
 };
 
-class VGMStreamReader : public AudioReader {
+class VGMStreamReader : public AudioReader
+{
 public:
     VGMStreamReader();
 
