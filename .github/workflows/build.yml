@@ -14,28 +14,35 @@ jobs:
   build:
     name: Build fooyin and plugin
     runs-on: ubuntu-latest
-    container: archlinux:latest
 
     env:
       FOOYIN_REF: master
       FOOYIN_PREFIX: ${{ github.workspace }}/fooyin-install
+      QT_VERSION: 6.4.3
 
     steps:
       - name: Dependencies
         run: |
-          pacman -Syu --noconfirm --needed \
-            alsa-lib \
-            base-devel \
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
             cmake \
-            ffmpeg \
-            git \
-            icu \
-            ninja \
-            qt6-base \
-            qt6-svg \
-            qt6-tools \
-            taglib \
-            zlib
+            ninja-build \
+            libasound2-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libicu-dev \
+            libtag1-dev \
+            zlib1g-dev
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          archives: qtbase qtsvg qttools
+          cache: true
+          install-deps: 'true'
 
       - name: Checkout plugin
         uses: actions/checkout@v7
