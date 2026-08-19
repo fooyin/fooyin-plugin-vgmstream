@@ -1,0 +1,103 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  release:
+    types: [published]
+
+permissions:
+  contents: write # needed for release upload
+
+jobs:
+  build:
+    name: Build fooyin and plugin
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+
+    env:
+      FOOYIN_REF: master
+      FOOYIN_PREFIX: ${{ github.workspace }}/fooyin-install
+
+    steps:
+      - name: Dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            alsa-lib \
+            base-devel \
+            cmake \
+            ffmpeg \
+            git \
+            icu \
+            ninja \
+            qt6-base \
+            qt6-svg \
+            qt6-tools \
+            taglib \
+            zlib
+
+      - name: Checkout plugin
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Checkout fooyin
+        uses: actions/checkout@v7
+        with:
+          repository: fooyin/fooyin
+          ref: ${{ env.FOOYIN_REF }}
+          path: fooyin
+          submodules: recursive
+
+      - name: Configure fooyin
+        run: |
+          cmake -S fooyin -B fooyin-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$FOOYIN_PREFIX" \
+            -DBUILD_PCH=ON \
+            -DBUILD_TRANSLATIONS=OFF \
+            -DINSTALL_HEADERS=ON \
+            -DPLUGIN_SELECTION=none
+
+      - name: Build fooyin
+        run: cmake --build fooyin-build
+
+      - name: Install fooyin
+        run: cmake --install fooyin-build
+
+      - name: Configure plugin
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$FOOYIN_PREFIX"
+
+      - name: Build plugin
+        run: cmake --build build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: fooyin-plugin-vgmstream
+          path: build/fyplugin_vgmstream.so
+          if-no-files-found: error
+
+  attach:
+    name: Attach to release
+    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: fooyin-plugin-vgmstream
+          path: ./artifacts
+
+      - name: Upload artifact to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.event.release.tag_name }}
+          file: ./artifacts/fyplugin_vgmstream.so
+          overwrite: true
