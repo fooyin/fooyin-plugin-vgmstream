@@ -28,12 +28,10 @@ namespace Fooyin::VGMStream {
 namespace {
 class VGMStreamSettingsProvider : public PluginSettingsProvider
 {
-public:
-    void showSettings(QWidget* parent) override
+protected:
+    QDialog* createSettings(QWidget* parent) override
     {
-        auto* dialog = new VGMStreamSettings(parent);
-        dialog->setAttribute(Qt::WA_DeleteOnClose);
-        dialog->show();
+        return new VGMStreamSettings(parent);
     }
 };
 } // namespace
