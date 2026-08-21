@@ -35,6 +35,8 @@ using namespace Qt::StringLiterals;
 
 namespace Fooyin::VGMStream {
 namespace {
+constexpr qsizetype StreamBufferSize = 32 * 1024LL;
+
 struct StreamFileSource
 {
     QIODevice* device{nullptr};
@@ -48,6 +50,9 @@ struct StreamFileData
     std::unique_ptr<QIODevice> ownedDevice;
     QIODevice* device{nullptr};
     QByteArray name;
+    QByteArray buffer;
+    qint64 bufferOffset{0};
+    qint64 validBufferSize{0};
 };
 
 libstreamfile_t* makeStreamFile(const std::shared_ptr<StreamFileSource>& source, const QString& name);
@@ -61,16 +66,62 @@ QString normalisedStreamName(QString name)
 int streamFileRead(void* userData, uint8_t* destination, int64_t offset, int length)
 {
     auto* data = static_cast<StreamFileData*>(userData);
-    if(!data || !data->device) {
+    if(!data || !data->device || !destination || offset < 0 || length <= 0) {
         return 0;
     }
 
-    if(data->device->isSequential() || !data->device->seek(offset)) {
-        return 0;
+    qint64 currentOffset{offset};
+    int bytesRead{0};
+
+    if(currentOffset >= data->bufferOffset && currentOffset < data->bufferOffset + data->validBufferSize) {
+        const qint64 bufferPosition = currentOffset - data->bufferOffset;
+        const auto amount
+            = static_cast<int>(std::min<qint64>(data->validBufferSize - bufferPosition, length - bytesRead));
+        std::memcpy(destination, data->buffer.constData() + bufferPosition, amount);
+        currentOffset += amount;
+        bytesRead += amount;
     }
 
-    const qint64 bytesRead = data->device->read(reinterpret_cast<char*>(destination), length);
-    return bytesRead > 0 ? static_cast<int>(bytesRead) : 0;
+    while(bytesRead < length) {
+        if(currentOffset >= data->device->size()
+           || (data->device->pos() != currentOffset && !data->device->seek(currentOffset))) {
+            break;
+        }
+
+        data->bufferOffset    = currentOffset;
+        data->validBufferSize = data->device->read(data->buffer.data(), data->buffer.size());
+        if(data->validBufferSize <= 0) {
+            break;
+        }
+
+        const auto amount = static_cast<int>(std::min<qint64>(data->validBufferSize, length - bytesRead));
+        std::memcpy(destination + bytesRead, data->buffer.constData(), amount);
+        currentOffset += amount;
+        bytesRead += amount;
+    }
+
+    return bytesRead;
+}
+
+QString streamTitle(libvgmstream_t* stream, const QString& filename)
+{
+    if(!stream) {
+        return {};
+    }
+
+    const QByteArray encodedFilename = filename.toUtf8();
+    QByteArray title(1024, '\0');
+
+    libvgmstream_title_t config{};
+    config.remove_extension = true;
+    config.remove_archive   = true;
+    config.filename         = encodedFilename.constData();
+
+    if(libvgmstream_get_title(stream, &config, title.data(), title.size()) < 0) {
+        return {};
+    }
+
+    return QString::fromUtf8(title.constData());
 }
 
 int64_t streamFileSize(void* userData)
@@ -113,6 +164,7 @@ libstreamfile_t* makeStreamFile(const std::shared_ptr<StreamFileSource>& source,
     auto data    = std::make_unique<StreamFileData>();
     data->source = source;
     data->name   = normalisedName.toUtf8();
+    data->buffer.resize(StreamBufferSize);
 
     if(normalisedName == source->name) {
         data->device = source->device;
@@ -142,14 +194,7 @@ libstreamfile_t* makeStreamFile(const std::shared_ptr<StreamFileSource>& source,
     streamFile->open      = streamFileOpen;
     streamFile->close     = streamFileClose;
 
-    libstreamfile_t* buffered = libstreamfile_open_buffered(streamFile.get());
-    if(!buffered) {
-        streamFileClose(streamFile.release());
-        return nullptr;
-    }
-
-    streamFile.release();
-    return buffered;
+    return streamFile.release();
 }
 
 QStringList supportedExtensions()
@@ -599,8 +644,19 @@ bool VGMStreamReader::readTrack(const AudioSource& source, Track& track)
     if(format->stream_bitrate > 0) {
         track.setBitrate(format->stream_bitrate / 1000);
     }
+    if(m_settings.value(GenerateTitles, DefaultGenerateTitles).toBool()) {
+        const QString title = streamTitle(stream.get(), m_path);
+        if(!title.isEmpty()) {
+            track.setTitle(title);
+        }
+    }
     if(format->stream_name[0] != '\0') {
-        track.setTitle(QString::fromUtf8(format->stream_name));
+        track.addExtraTag(u"STREAM_NAME"_s, QString::fromUtf8(format->stream_name));
+    }
+    if(format->subsong_count > 1) {
+        track.addExtraTag(u"STREAM_COUNT"_s, QString::number(format->subsong_count));
+        track.addExtraTag(u"STREAM_INDEX"_s,
+                          QString::number(format->subsong_index > 0 ? format->subsong_index : track.subsong() + 1));
     }
 
     readExternalTags(streamSource, m_path, track);

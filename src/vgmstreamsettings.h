@@ -24,6 +24,7 @@
 #include <QDialog>
 
 class QSpinBox;
+class QCheckBox;
 
 namespace Fooyin::VGMStream {
 class VGMStreamSettings : public QDialog
@@ -39,5 +40,6 @@ private:
     FySettings m_settings;
     QSpinBox* m_loopCount;
     QSpinBox* m_fadeLength;
+    QCheckBox* m_generateTitles;
 };
 } // namespace Fooyin::VGMStream

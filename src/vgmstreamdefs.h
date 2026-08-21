@@ -20,8 +20,10 @@
 #pragma once
 
 namespace Fooyin::VGMStream {
-constexpr auto DefaultLoopCount  = 2;
-constexpr auto LoopCount         = "VGMStream/LoopCount";
-constexpr auto DefaultFadeLength = 4000;
-constexpr auto FadeLength        = "VGMStream/FadeLength";
+constexpr auto DefaultLoopCount      = 2;
+constexpr auto LoopCount             = "VGMStream/LoopCount";
+constexpr auto DefaultFadeLength     = 4000;
+constexpr auto FadeLength            = "VGMStream/FadeLength";
+constexpr auto DefaultGenerateTitles = true;
+constexpr auto GenerateTitles        = "VGMStream/GenerateTitles";
 } // namespace Fooyin::VGMStream

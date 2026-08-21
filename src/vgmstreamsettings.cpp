@@ -21,6 +21,7 @@
 
 #include "vgmstreamdefs.h"
 
+#include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -34,6 +35,7 @@ VGMStreamSettings::VGMStreamSettings(QWidget* parent)
     : QDialog{parent}
     , m_loopCount{new QSpinBox(this)}
     , m_fadeLength{new QSpinBox(this)}
+    , m_generateTitles{new QCheckBox(tr("Generate titles from filenames and stream names"), this)}
 {
     setWindowTitle(tr("VGMStream Settings"));
 
@@ -56,19 +58,26 @@ VGMStreamSettings::VGMStreamSettings(QWidget* parent)
     lengthLayout->addWidget(m_fadeLength, 1, 1);
     lengthLayout->setColumnStretch(2, 1);
 
+    auto* metadataGroup  = new QGroupBox(tr("Metadata"), this);
+    auto* metadataLayout = new QGridLayout(metadataGroup);
+    metadataLayout->addWidget(m_generateTitles, 0, 0);
+
     auto* layout = new QGridLayout(this);
     layout->setSizeConstraint(QLayout::SetFixedSize);
     layout->addWidget(lengthGroup, 0, 0);
-    layout->addWidget(buttons, 1, 0, Qt::AlignBottom);
+    layout->addWidget(metadataGroup, 1, 0);
+    layout->addWidget(buttons, 2, 0, Qt::AlignBottom);
 
     m_loopCount->setValue(m_settings.value(LoopCount, DefaultLoopCount).toInt());
     m_fadeLength->setValue(m_settings.value(FadeLength, DefaultFadeLength).toInt());
+    m_generateTitles->setChecked(m_settings.value(GenerateTitles, DefaultGenerateTitles).toBool());
 }
 
 void VGMStreamSettings::accept()
 {
     m_settings.setValue(LoopCount, m_loopCount->value());
     m_settings.setValue(FadeLength, m_fadeLength->value());
+    m_settings.setValue(GenerateTitles, m_generateTitles->isChecked());
     done(Accepted);
 }
 } // namespace Fooyin::VGMStream
