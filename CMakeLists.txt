@@ -4,7 +4,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 project(
     vgmstream
-    VERSION 1.0.1
+    VERSION 1.0.2
     DESCRIPTION "VGMStream plugin for fooyin"
     HOMEPAGE_URL "https://github.com/fooyin/fooyin-plugin-vgmstream"
     LANGUAGES CXX
