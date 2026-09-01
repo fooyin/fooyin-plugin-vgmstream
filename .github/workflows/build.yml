@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Build fooyin and plugin
+    name: Build fooyin and plugin (Linux)
     runs-on: ubuntu-latest
     container: ubuntu:24.04
 
@@ -85,26 +85,148 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
-          name: fooyin-plugin-vgmstream
+          name: fooyin-plugin-vgmstream-linux
           path: build/fyplugin_vgmstream.so
+          if-no-files-found: error
+
+  build-windows:
+    name: Build fooyin and plugin (Windows)
+    runs-on: windows-latest
+
+    env:
+      FOOYIN_REF: master
+      FOOYIN_PREFIX: ${{ github.workspace }}/fooyin-install
+      QT_VERSION: '6.8.3'
+      VCPKG_DISABLE_METRICS: true
+      VCPKG_ROOT_DIR: C:/vcpkg
+      VCPKG_INSTALLED_DIR: C:/v
+
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Checkout fooyin
+        uses: actions/checkout@v7
+        with:
+          repository: fooyin/fooyin
+          ref: ${{ env.FOOYIN_REF }}
+          path: fooyin
+          submodules: recursive
+
+      - name: Set up vcpkg
+        shell: pwsh
+        run: |
+          $vcpkgCommit = (Get-Content fooyin/vcpkg.json | ConvertFrom-Json).'builtin-baseline'
+          git init $env:VCPKG_ROOT_DIR
+          if (-not (git -C $env:VCPKG_ROOT_DIR remote get-url origin 2>$null)) {
+            git -C $env:VCPKG_ROOT_DIR remote add origin https://github.com/microsoft/vcpkg.git
+          }
+          git -C $env:VCPKG_ROOT_DIR fetch --depth 1 origin $vcpkgCommit
+          git -C $env:VCPKG_ROOT_DIR checkout --detach FETCH_HEAD
+          & "$env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Install CMake and Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          archives: qtbase qtsvg qttools
+          cache: true
+          arch: win64_msvc2022_64
+          install-deps: 'true'
+
+      - name: Set up MSVC environment
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: amd64
+
+      - name: Cache vcpkg
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.VCPKG_INSTALLED_DIR }}
+          key: windows-vcpkg-${{ hashFiles('fooyin/vcpkg.json', 'fooyin/vcpkg-configuration.json') }}
+          restore-keys: windows-vcpkg-
+
+      - name: Configure fooyin
+        shell: pwsh
+        run: |
+          cmake -S fooyin -B fooyin-build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX="$env:FOOYIN_PREFIX" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT_DIR/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DQt6_DIR="$env:QT_ROOT_DIR/lib/cmake/Qt6" `
+            -DBUILD_PCH=ON `
+            -DBUILD_TRANSLATIONS=OFF `
+            -DINSTALL_FHS=OFF `
+            -DINSTALL_HEADERS=ON `
+            -DPLUGIN_SELECTION=none
+
+      - name: Build fooyin
+        run: cmake --build fooyin-build
+
+      - name: Install fooyin
+        run: cmake --install fooyin-build
+
+      - name: Configure plugin
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$env:FOOYIN_PREFIX" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT_DIR/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DQt6_DIR="$env:QT_ROOT_DIR/lib/cmake/Qt6"
+
+      - name: Build plugin
+        run: cmake --build build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: fooyin-plugin-vgmstream-windows
+          path: build/fyplugin_vgmstream.dll
           if-no-files-found: error
 
   attach:
     name: Attach to release
     if: github.event_name == 'release' && github.event.action == 'published'
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, build-windows]
     steps:
-      - name: Download artifact
+      - name: Download Linux artifact
         uses: actions/download-artifact@v7
         with:
-          name: fooyin-plugin-vgmstream
+          name: fooyin-plugin-vgmstream-linux
           path: ./artifacts
 
-      - name: Upload artifact to release
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: fooyin-plugin-vgmstream-windows
+          path: ./artifacts
+
+      - name: Upload Linux artifact to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.event.release.tag_name }}
           file: ./artifacts/fyplugin_vgmstream.so
+          overwrite: true
+
+      - name: Upload Windows artifact to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.event.release.tag_name }}
+          file: ./artifacts/fyplugin_vgmstream.dll
           overwrite: true
