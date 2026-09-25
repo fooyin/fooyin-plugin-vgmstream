@@ -44,7 +44,8 @@ QString VGMStreamPlugin::inputName() const
 InputCreator VGMStreamPlugin::inputCreator() const
 {
     InputCreator creator;
-    creator.decoder = []() {
+    creator.priority = 200;
+    creator.decoder  = []() {
         return std::make_unique<VGMStreamDecoder>();
     };
     creator.reader = []() {
