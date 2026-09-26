@@ -22,19 +22,39 @@
 #include "vgmstreaminput.h"
 #include "vgmstreamsettings.h"
 
+#include <core/engine/audioloader.h>
+
 using namespace Qt::StringLiterals;
 
 namespace Fooyin::VGMStream {
 namespace {
 class VGMStreamSettingsProvider : public PluginSettingsProvider
 {
+public:
+    explicit VGMStreamSettingsProvider(std::shared_ptr<AudioLoader> audioLoader)
+        : m_audioLoader{std::move(audioLoader)}
+    { }
+
 protected:
     QDialog* createSettings(QWidget* parent) override
     {
-        return new VGMStreamSettings(parent);
+        auto* dialog = new VGMStreamSettings(parent);
+        QObject::connect(dialog, &QDialog::accepted, dialog, [audioLoader = m_audioLoader] {
+                audioLoader->reloadDecoderExtensions(u"VGMStream"_s);
+                audioLoader->reloadReaderExtensions(u"VGMStream"_s);
+        });
+        return dialog;
     }
+
+private:
+    std::shared_ptr<AudioLoader> m_audioLoader;
 };
 } // namespace
+
+void VGMStreamPlugin::initialise(const CorePluginContext& context)
+{
+    m_audioLoader = context.audioLoader;
+}
 
 QString VGMStreamPlugin::inputName() const
 {
@@ -56,7 +76,7 @@ InputCreator VGMStreamPlugin::inputCreator() const
 
 std::unique_ptr<PluginSettingsProvider> VGMStreamPlugin::settingsProvider() const
 {
-    return std::make_unique<VGMStreamSettingsProvider>();
+    return std::make_unique<VGMStreamSettingsProvider>(m_audioLoader);
 }
 } // namespace Fooyin::VGMStream
 

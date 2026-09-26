@@ -26,6 +26,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
+#include <QLineEdit>
 #include <QSpinBox>
 
 using namespace Qt::StringLiterals;
@@ -36,6 +37,7 @@ VGMStreamSettings::VGMStreamSettings(QWidget* parent)
     , m_loopCount{new QSpinBox(this)}
     , m_fadeLength{new QSpinBox(this)}
     , m_generateTitles{new QCheckBox(tr("Generate titles from filenames and stream names"), this)}
+    , m_commonExtensions{new QCheckBox(tr("Enable common extensions"), this)}
 {
     setWindowTitle(tr("VGMStream Settings"));
 
@@ -62,15 +64,23 @@ VGMStreamSettings::VGMStreamSettings(QWidget* parent)
     auto* metadataLayout = new QGridLayout(metadataGroup);
     metadataLayout->addWidget(m_generateTitles, 0, 0);
 
+    auto* extensionsGroup  = new QGroupBox(tr("File types"), this);
+    auto* extensionsLayout = new QGridLayout(extensionsGroup);
+    m_commonExtensions->setToolTip(
+        tr("Let VGMStream handle common formats such as OGG, FLAC and WAV."));
+    extensionsLayout->addWidget(m_commonExtensions, 0, 0, 1, 2);
+
     auto* layout = new QGridLayout(this);
     layout->setSizeConstraint(QLayout::SetFixedSize);
     layout->addWidget(lengthGroup, 0, 0);
     layout->addWidget(metadataGroup, 1, 0);
-    layout->addWidget(buttons, 2, 0, Qt::AlignBottom);
+    layout->addWidget(extensionsGroup, 2, 0);
+    layout->addWidget(buttons, 3, 0, Qt::AlignBottom);
 
     m_loopCount->setValue(m_settings.value(LoopCount, DefaultLoopCount).toInt());
     m_fadeLength->setValue(m_settings.value(FadeLength, DefaultFadeLength).toInt());
     m_generateTitles->setChecked(m_settings.value(GenerateTitles, DefaultGenerateTitles).toBool());
+    m_commonExtensions->setChecked(m_settings.value(CommonExtensions, DefaultCommonExtensions).toBool());
 }
 
 void VGMStreamSettings::accept()
@@ -78,6 +88,8 @@ void VGMStreamSettings::accept()
     m_settings.setValue(LoopCount, m_loopCount->value());
     m_settings.setValue(FadeLength, m_fadeLength->value());
     m_settings.setValue(GenerateTitles, m_generateTitles->isChecked());
+    m_settings.setValue(CommonExtensions, m_commonExtensions->isChecked());
+    m_settings.sync();
     done(Accepted);
 }
 } // namespace Fooyin::VGMStream

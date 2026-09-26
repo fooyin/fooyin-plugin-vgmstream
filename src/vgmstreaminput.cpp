@@ -197,17 +197,42 @@ libstreamfile_t* makeStreamFile(const std::shared_ptr<StreamFileSource>& source,
     return streamFile.release();
 }
 
-QStringList supportedExtensions()
+QStringList extensionList(const char* const* values, int count)
 {
-    int count{0};
-    const char* const* values = libvgmstream_get_extensions(&count);
-
     QStringList extensions;
     extensions.reserve(count);
 
     for(int i{0}; i < count; ++i) {
         extensions.emplace_back(QString::fromLatin1(values[i]));
     }
+
+    return extensions;
+}
+
+QStringList commonExtensions()
+{
+    int count{0};
+    const char* const* values = libvgmstream_get_common_extensions(&count);
+    return extensionList(values, count);
+}
+
+QStringList configuredExtensions(const FySettings& settings)
+{
+    QStringList extensions;
+    if(settings.value(CommonExtensions, DefaultCommonExtensions).toBool()) {
+        extensions.append(commonExtensions());
+    }
+    extensions.removeDuplicates();
+    return extensions;
+}
+
+QStringList supportedExtensions(const FySettings& settings)
+{
+    int count{0};
+    const char* const* values = libvgmstream_get_extensions(&count);
+    QStringList extensions    = extensionList(values, count);
+    extensions.append(configuredExtensions(settings));
+    extensions.removeDuplicates();
 
     return extensions;
 }
@@ -334,7 +359,7 @@ VGMStreamDecoder::VGMStreamDecoder()
 
 QStringList VGMStreamDecoder::extensions() const
 {
-    return supportedExtensions();
+    return supportedExtensions(m_settings);
 }
 
 bool VGMStreamDecoder::isSeekable() const
@@ -548,7 +573,7 @@ VGMStreamReader::VGMStreamReader()
 
 QStringList VGMStreamReader::extensions() const
 {
-    return supportedExtensions();
+    return supportedExtensions(m_settings);
 }
 
 bool VGMStreamReader::canReadCover() const

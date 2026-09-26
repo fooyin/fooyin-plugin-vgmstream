@@ -41,5 +41,6 @@ private:
     QSpinBox* m_loopCount;
     QSpinBox* m_fadeLength;
     QCheckBox* m_generateTitles;
+    QCheckBox* m_commonExtensions;
 };
 } // namespace Fooyin::VGMStream
