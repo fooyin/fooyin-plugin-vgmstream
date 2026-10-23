@@ -43,6 +43,20 @@ elseif(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/CMakeLists.txt")
         set(USE_CELT ON CACHE BOOL "Use CELT decoder" FORCE)
         set(USE_SPEEX ON CACHE BOOL "Use Speex decoder" FORCE)
 
+        set(vgmstream_ffmpeg_libraries)
+        foreach(component IN ITEMS avcodec avformat avutil swresample)
+            file(GLOB ffmpeg_definitions CONFIGURE_DEPENDS
+                 "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/vgmstream/ext_libs/${component}-vgmstream-*.def"
+            )
+            list(LENGTH ffmpeg_definitions definition_count)
+            if(NOT definition_count EQUAL 1)
+                message(FATAL_ERROR "Expected one bundled FFmpeg definition file for ${component}")
+            endif()
+            list(GET ffmpeg_definitions 0 definition_file)
+            get_filename_component(library "${definition_file}" NAME_WE)
+            list(APPEND vgmstream_ffmpeg_libraries "${library}")
+        endforeach()
+
         if(MSVC)
             if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
                 message(FATAL_ERROR "Bundled vgmstream codec DLLs require a 64-bit Windows build")
@@ -56,9 +70,7 @@ elseif(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/CMakeLists.txt")
             file(MAKE_DIRECTORY "${VGMSTREAM_FFMPEG_IMPORT_DIR}")
 
             set(FFMPEG_LIBRARIES)
-            foreach(library IN ITEMS avcodec-vgmstream-59 avformat-vgmstream-59 avutil-vgmstream-57
-                                     swresample-vgmstream-4
-            )
+            foreach(library IN LISTS vgmstream_ffmpeg_libraries)
                 set(source_def "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/ext_libs/${library}.def")
                 set(generated_def "${VGMSTREAM_FFMPEG_IMPORT_DIR}/${library}.def")
                 set(import_library "${VGMSTREAM_FFMPEG_IMPORT_DIR}/${library}.lib")
@@ -83,25 +95,6 @@ elseif(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/CMakeLists.txt")
 
     # Some dependency targets are directory-scoped upstream, but setup_target() is called from this directory.
     # Re-expose them here so CMake resolves their archives instead of emitting bare -l names.
-    if(NOT WIN32 AND USE_G719 AND NOT TARGET g719_decode)
-        add_library(g719_decode STATIC IMPORTED GLOBAL)
-        set_target_properties(
-            g719_decode PROPERTIES IMPORTED_LOCATION
-                                   "${CMAKE_CURRENT_BINARY_DIR}/vgmstream/dependencies/libg719_decode/libg719_decode.a"
-        )
-    endif()
-    if(NOT WIN32
-       AND USE_ATRAC9
-       AND TARGET ATRAC9_MAKE
-       AND NOT TARGET atrac9
-    )
-        add_library(atrac9 STATIC IMPORTED GLOBAL)
-        set_target_properties(
-            atrac9 PROPERTIES IMPORTED_LOCATION
-                              "${CMAKE_CURRENT_BINARY_DIR}/vgmstream/dependencies/LibAtrac9/bin/libatrac9.a"
-        )
-        add_dependencies(atrac9 ATRAC9_MAKE)
-    endif()
     if(NOT WIN32 AND USE_CELT)
         foreach(version IN ITEMS 0061 0110)
             if(TARGET CELT_${version}_MAKE AND NOT TARGET celt${version})
@@ -171,14 +164,9 @@ if(BUILD_PLUGIN_BUNDLE)
         endif()
         foreach(
             codec IN
-            ITEMS avcodec-vgmstream-59
-                  avformat-vgmstream-59
-                  avutil-vgmstream-57
-                  swresample-vgmstream-4
-                  libatrac9
+            ITEMS ${vgmstream_ffmpeg_libraries}
                   libcelt-0061
                   libcelt-0110
-                  libg719_decode
                   libmpg123-0
                   libspeex-1
                   libvorbis
