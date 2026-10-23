@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.19)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -13,13 +13,19 @@ project(
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Fooyin)
-find_package(VGMStream QUIET MODULE)
+option(BUILD_PLUGIN_BUNDLE "Enable the package_plugin target using bundled vgmstream" OFF)
 
-if(VGMStream_FOUND)
+find_package(Fooyin)
+if(NOT BUILD_PLUGIN_BUNDLE)
+    find_package(VGMStream QUIET MODULE)
+endif()
+
+if(NOT BUILD_PLUGIN_BUNDLE AND VGMStream_FOUND)
     message(STATUS "Using system vgmstream")
 elseif(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/CMakeLists.txt")
     message(STATUS "Using 3rd-party vgmstream")
+
+    set(VGMSTREAM_BUNDLED ON)
 
     set(BUILD_CLI OFF CACHE BOOL "Build VGMStream CLI" FORCE)
     set(BUILD_V123 OFF CACHE BOOL "Build vgmstream123" FORCE)
@@ -29,23 +35,102 @@ elseif(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/CMakeLists.txt")
     set(BUILD_XMPLAY OFF CACHE BOOL "Build XMPlay plugin" FORCE)
 
     if(WIN32)
-        # Bundled vgmstream's optional codec DLLs are 32-bit and cannot link into fooyin's x64 plugin
-        set(USE_MPEG OFF CACHE BOOL "Use libmpg123" FORCE)
-        set(USE_VORBIS OFF CACHE BOOL "Use libvorbis" FORCE)
-        set(USE_FFMPEG OFF CACHE BOOL "Use FFmpeg" FORCE)
-        set(USE_G719 OFF CACHE BOOL "Use G.719 decoder" FORCE)
-        set(USE_ATRAC9 OFF CACHE BOOL "Use ATRAC9 decoder" FORCE)
-        set(USE_CELT OFF CACHE BOOL "Use CELT decoder" FORCE)
-        set(USE_SPEEX OFF CACHE BOOL "Use Speex decoder" FORCE)
+        set(USE_MPEG ON CACHE BOOL "Use libmpg123" FORCE)
+        set(USE_VORBIS ON CACHE BOOL "Use libvorbis" FORCE)
+        set(USE_FFMPEG ON CACHE BOOL "Use FFmpeg" FORCE)
+        set(USE_G719 ON CACHE BOOL "Use G.719 decoder" FORCE)
+        set(USE_ATRAC9 ON CACHE BOOL "Use ATRAC9 decoder" FORCE)
+        set(USE_CELT ON CACHE BOOL "Use CELT decoder" FORCE)
+        set(USE_SPEEX ON CACHE BOOL "Use Speex decoder" FORCE)
+
+        if(MSVC)
+            if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+                message(FATAL_ERROR "Bundled vgmstream codec DLLs require a 64-bit Windows build")
+            endif()
+
+            # vgmstream normally gets this from CMAKE_GENERATOR_PLATFORM, which is empty with Ninja
+            set(MSVC_MACHINE_TYPE x64)
+
+            # Generate import libraries whose embedded names match vgmstream's versioned FFmpeg DLLs
+            set(VGMSTREAM_FFMPEG_IMPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/vgmstream-ffmpeg-imports")
+            file(MAKE_DIRECTORY "${VGMSTREAM_FFMPEG_IMPORT_DIR}")
+
+            set(FFMPEG_LIBRARIES)
+            foreach(library IN ITEMS avcodec-vgmstream-59 avformat-vgmstream-59 avutil-vgmstream-57
+                                     swresample-vgmstream-4
+            )
+                set(source_def "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/ext_libs/${library}.def")
+                set(generated_def "${VGMSTREAM_FFMPEG_IMPORT_DIR}/${library}.def")
+                set(import_library "${VGMSTREAM_FFMPEG_IMPORT_DIR}/${library}.lib")
+                file(READ "${source_def}" definitions)
+                file(WRITE "${generated_def}" "LIBRARY ${library}.dll\n${definitions}")
+                add_custom_command(
+                    OUTPUT "${import_library}"
+                    COMMAND "${CMAKE_AR}" "/def:${generated_def}" "/machine:${MSVC_MACHINE_TYPE}"
+                            "/out:${import_library}"
+                    DEPENDS "${generated_def}"
+                    VERBATIM
+                )
+                list(APPEND FFMPEG_LIBRARIES "${import_library}")
+            endforeach()
+            add_custom_target(vgmstream_ffmpeg_imports DEPENDS ${FFMPEG_LIBRARIES})
+            set(FFMPEG_PATH "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/ext_libs" CACHE PATH "Path to FFmpeg" FORCE)
+            set(FFMPEG_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/ext_includes/ffmpeg")
+        endif()
     endif()
 
     add_subdirectory(${CMAKE_SOURCE_DIR}/3rdparty/vgmstream vgmstream EXCLUDE_FROM_ALL)
-    target_include_directories(
-        libvgmstream
-        INTERFACE "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/src"
+
+    # Some dependency targets are directory-scoped upstream, but setup_target() is called from this directory.
+    # Re-expose them here so CMake resolves their archives instead of emitting bare -l names.
+    if(NOT WIN32 AND USE_G719 AND NOT TARGET g719_decode)
+        add_library(g719_decode STATIC IMPORTED GLOBAL)
+        set_target_properties(
+            g719_decode PROPERTIES IMPORTED_LOCATION
+                                   "${CMAKE_CURRENT_BINARY_DIR}/vgmstream/dependencies/libg719_decode/libg719_decode.a"
+        )
+    endif()
+    if(NOT WIN32
+       AND USE_ATRAC9
+       AND TARGET ATRAC9_MAKE
+       AND NOT TARGET atrac9
     )
+        add_library(atrac9 STATIC IMPORTED GLOBAL)
+        set_target_properties(
+            atrac9 PROPERTIES IMPORTED_LOCATION
+                              "${CMAKE_CURRENT_BINARY_DIR}/vgmstream/dependencies/LibAtrac9/bin/libatrac9.a"
+        )
+        add_dependencies(atrac9 ATRAC9_MAKE)
+    endif()
+    if(NOT WIN32 AND USE_CELT)
+        foreach(version IN ITEMS 0061 0110)
+            if(TARGET CELT_${version}_MAKE AND NOT TARGET celt${version})
+                if(version STREQUAL "0061")
+                    set(celt_archive libcelt.a)
+                else()
+                    set(celt_archive libcelt0.a)
+                endif()
+                add_library(celt${version} STATIC IMPORTED GLOBAL)
+                set_target_properties(
+                    celt${version}
+                    PROPERTIES
+                        IMPORTED_LOCATION
+                        "${CMAKE_CURRENT_BINARY_DIR}/vgmstream/dependencies/celt-${version}/libcelt/.libs/${celt_archive}"
+                )
+                add_dependencies(celt${version} CELT_${version}_MAKE)
+            endif()
+        endforeach()
+    endif()
+
+    target_include_directories(libvgmstream INTERFACE "${CMAKE_SOURCE_DIR}/3rdparty/vgmstream/src")
     add_library(VGMStream::VGMStream ALIAS libvgmstream)
 else()
+    if(BUILD_PLUGIN_BUNDLE)
+        message(
+            FATAL_ERROR
+                "Plugin bundles require the vgmstream submodule; initialise it with git submodule update --init --recursive"
+        )
+    endif()
     message(STATUS "vgmstream not found; skipping vgmstream plugin")
     return()
 endif()
@@ -64,3 +149,60 @@ create_fooyin_plugin(
             src/vgmstreamsettings.cpp
             src/vgmstreamsettings.h
 )
+
+if(VGMSTREAM_BUNDLED)
+    # vgmstream's static library leaves optional codec linkage to its final consumer
+    setup_target(vgmstream TRUE)
+    if(TARGET vgmstream_ffmpeg_imports)
+        add_dependencies(vgmstream vgmstream_ffmpeg_imports)
+    endif()
+endif()
+
+if(BUILD_PLUGIN_BUNDLE)
+    set(bundle_runtime_files)
+    if(WIN32)
+        set(codec_arch "${CMAKE_SYSTEM_PROCESSOR}")
+        if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID)
+            set(codec_arch "${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}")
+        endif()
+        string(TOLOWER "${codec_arch}" codec_arch)
+        if(NOT codec_arch MATCHES "^(amd64|x86_64|x64)$" OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+            message(FATAL_ERROR "Bundled vgmstream codec DLLs require a Windows x64 build")
+        endif()
+        foreach(
+            codec IN
+            ITEMS avcodec-vgmstream-59
+                  avformat-vgmstream-59
+                  avutil-vgmstream-57
+                  swresample-vgmstream-4
+                  libatrac9
+                  libcelt-0061
+                  libcelt-0110
+                  libg719_decode
+                  libmpg123-0
+                  libspeex-1
+                  libvorbis
+        )
+            list(APPEND bundle_runtime_files
+                 "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/vgmstream/ext_libs/dll-x64/${codec}.dll"
+            )
+        endforeach()
+    endif()
+
+    set(vgmstream_license "${CMAKE_CURRENT_BINARY_DIR}/bundle-licenses/vgmstream.txt")
+    configure_file(3rdparty/vgmstream/COPYING "${vgmstream_license}" COPYONLY)
+    create_fooyin_plugin_bundle(
+        vgmstream
+        NAME
+        fooyin-vgmstream
+        RUNTIME_FILES
+        ${bundle_runtime_files}
+        FILES
+        COPYING
+        README.md
+        LICENSE_FILES
+        "${vgmstream_license}"
+        LICENSE_DIRECTORIES
+        3rdparty/vgmstream/ext_libs/licenses
+    )
+endif()

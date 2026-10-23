@@ -12,94 +12,98 @@ permissions:
 
 jobs:
   build:
-    name: Build fooyin and plugin (Linux)
+    name: Build plugin with fooyin SDK (Linux)
     runs-on: ubuntu-latest
     container: ubuntu:24.04
 
     env:
-      FOOYIN_REF: master
+      FOOYIN_SDK_RELEASE: nightly
       FOOYIN_PREFIX: ${{ github.workspace }}/fooyin-install
 
     steps:
       - name: Dependencies
         run: |
           apt-get update
-          apt-get install -y \
-            build-essential \
+          apt-get install -y --no-install-recommends \
+            build-essential  \
             git \
             cmake \
             ninja-build \
             pkg-config \
-            libasound2-dev \
+            ca-certificates \
+            xz-utils \
             qt6-base-dev \
-            qt6-svg-dev \
-            qt6-tools-dev \
+            libqt6svg6 \
+            libqt6sql6-sqlite \
             libavcodec-dev \
-            libavfilter-dev \
+            libavfilter9 \
             libavformat-dev \
-            libavdevice-dev \
             libavutil-dev \
             libswresample-dev \
-            libicu-dev \
-            libtag1-dev \
-            zlib1g-dev
+            libicu74 \
+            libtag1v5 \
+            libarchive13t64 \
+            libmpg123-dev \
+            libvorbis-dev \
+            libspeex-dev \
+            zlib1g-dev \
+            libqcoro6core0t64 \
+            libqcoro6network0t64
 
       - name: Checkout plugin
         uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - name: Checkout fooyin
-        uses: actions/checkout@v7
+      - name: Download fooyin SDK
+        uses: robinraju/release-downloader@v1
         with:
           repository: fooyin/fooyin
-          ref: ${{ env.FOOYIN_REF }}
-          path: fooyin
-          submodules: recursive
+          tag: ${{ env.FOOYIN_SDK_RELEASE }}
+          fileName: fooyin-sdk-*-linux-x64-qt6.4.tar.xz
+          out-file-path: fooyin-sdk
 
-      - name: Configure fooyin
+      - name: Extract fooyin SDK
+        shell: bash
         run: |
-          cmake -S fooyin -B fooyin-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$FOOYIN_PREFIX" \
-            -DBUILD_PCH=ON \
-            -DBUILD_TRANSLATIONS=OFF \
-            -DINSTALL_HEADERS=ON \
-            -DPLUGIN_SELECTION=none
-
-      - name: Build fooyin
-        run: cmake --build fooyin-build
-
-      - name: Install fooyin
-        run: cmake --install fooyin-build
+          set -euo pipefail
+          archives=(fooyin-sdk/*.tar.xz)
+          if [[ ${#archives[@]} -ne 1 ]]; then
+            echo "Expected one Linux Qt 6.4 SDK" >&2
+            exit 1
+          fi
+          mkdir -p "$FOOYIN_PREFIX"
+          tar -xJf "${archives[0]}" -C "$FOOYIN_PREFIX" --strip-components=1
+          cat "$FOOYIN_PREFIX/sdk-manifest.json"
 
       - name: Configure plugin
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$FOOYIN_PREFIX"
+            -DCMAKE_PREFIX_PATH="$FOOYIN_PREFIX" \
+            -DBUILD_PLUGIN_BUNDLE=ON
 
       - name: Build plugin
         run: cmake --build build
+
+      - name: Package plugin bundle
+        run: cmake --build build --target package_plugin
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: fooyin-plugin-vgmstream-linux
-          path: build/fyplugin_vgmstream.so
+          path: build/fooyin-vgmstream-linux-x64.fyplugin
           if-no-files-found: error
 
   build-windows:
-    name: Build fooyin and plugin (Windows)
+    name: Build plugin with fooyin SDK (Windows)
     runs-on: windows-latest
 
     env:
-      FOOYIN_REF: master
+      FOOYIN_SDK_RELEASE: nightly
       FOOYIN_PREFIX: ${{ github.workspace }}/fooyin-install
-      QT_VERSION: '6.8.3'
-      VCPKG_DISABLE_METRICS: true
-      VCPKG_ROOT_DIR: C:/vcpkg
-      VCPKG_INSTALLED_DIR: C:/v
+      QT_VERSION: '6.12.0'
 
     steps:
       - name: Checkout plugin
@@ -107,28 +111,26 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Checkout fooyin
-        uses: actions/checkout@v7
+      - name: Download fooyin SDK
+        uses: robinraju/release-downloader@v1
         with:
           repository: fooyin/fooyin
-          ref: ${{ env.FOOYIN_REF }}
-          path: fooyin
-          submodules: recursive
+          tag: ${{ env.FOOYIN_SDK_RELEASE }}
+          fileName: fooyin-sdk-*-windows-x64-msvc-qt6.12.zip
+          out-file-path: fooyin-sdk-download
+          extract: true
+          extract-path: fooyin-sdk
 
-      - name: Set up vcpkg
+      - name: Set up fooyin SDK
         shell: pwsh
         run: |
-          $vcpkgCommit = (Get-Content fooyin/vcpkg.json | ConvertFrom-Json).'builtin-baseline'
-          git init $env:VCPKG_ROOT_DIR
-          if (-not (git -C $env:VCPKG_ROOT_DIR remote get-url origin 2>$null)) {
-            git -C $env:VCPKG_ROOT_DIR remote add origin https://github.com/microsoft/vcpkg.git
+          $ErrorActionPreference = 'Stop'
+          $prefixes = @(Get-ChildItem fooyin-sdk -Directory)
+          if ($prefixes.Count -ne 1) {
+            throw 'Expected one SDK installation directory'
           }
-          git -C $env:VCPKG_ROOT_DIR fetch --depth 1 origin $vcpkgCommit
-          git -C $env:VCPKG_ROOT_DIR checkout --detach FETCH_HEAD
-          & "$env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat" -disableMetrics
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
+          Move-Item -LiteralPath $prefixes[0].FullName -Destination $env:FOOYIN_PREFIX
+          Get-Content "$env:FOOYIN_PREFIX/sdk-manifest.json"
 
       - name: Install CMake and Ninja
         uses: lukka/get-cmake@latest
@@ -137,6 +139,8 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
+          # Support the Windows x64 repository layout used by Qt 6.11 and later.
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@8c3695d4a4e1ceabf6a74dc6c79681656dc6b74b
           archives: qtbase qtsvg qttools
           cache: true
           arch: win64_msvc2022_64
@@ -147,59 +151,30 @@ jobs:
         with:
           arch: amd64
 
-      - name: Cache vcpkg
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.VCPKG_INSTALLED_DIR }}
-          key: windows-vcpkg-${{ hashFiles('fooyin/vcpkg.json', 'fooyin/vcpkg-configuration.json') }}
-          restore-keys: windows-vcpkg-
-
-      - name: Configure fooyin
-        shell: pwsh
-        run: |
-          cmake -S fooyin -B fooyin-build -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_INSTALL_PREFIX="$env:FOOYIN_PREFIX" `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT_DIR/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows `
-            -DQt6_DIR="$env:QT_ROOT_DIR/lib/cmake/Qt6" `
-            -DBUILD_PCH=ON `
-            -DBUILD_TRANSLATIONS=OFF `
-            -DINSTALL_FHS=OFF `
-            -DINSTALL_HEADERS=ON `
-            -DPLUGIN_SELECTION=none
-
-      - name: Build fooyin
-        run: cmake --build fooyin-build
-
-      - name: Install fooyin
-        run: cmake --install fooyin-build
-
       - name: Configure plugin
         shell: pwsh
         run: |
           cmake -S . -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_PREFIX_PATH="$env:FOOYIN_PREFIX" `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT_DIR/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows `
-            -DQt6_DIR="$env:QT_ROOT_DIR/lib/cmake/Qt6"
+            -DQt6_DIR="$env:QT_ROOT_DIR/lib/cmake/Qt6" `
+            -DBUILD_PLUGIN_BUNDLE=ON
 
       - name: Build plugin
         run: cmake --build build
+
+      - name: Package plugin bundle
+        run: cmake --build build --target package_plugin
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: fooyin-plugin-vgmstream-windows
-          path: build/fyplugin_vgmstream.dll
+          path: build/fooyin-vgmstream-windows-x64.fyplugin
           if-no-files-found: error
 
-  attach:
-    name: Attach to release
-    if: github.event_name == 'release' && github.event.action == 'published'
+  bundle:
+    name: Package all platforms
     runs-on: ubuntu-latest
     needs: [build, build-windows]
     steps:
@@ -215,12 +190,51 @@ jobs:
           name: fooyin-plugin-vgmstream-windows
           path: ./artifacts
 
+      - name: Package combined plugin bundle
+        run: |
+          cmake -E make_directory bundle
+          cd bundle
+          cmake -E tar xf ../artifacts/fooyin-vgmstream-linux-x64.fyplugin
+          cmake -E tar xf ../artifacts/fooyin-vgmstream-windows-x64.fyplugin
+          cmake -E tar cf ../fooyin-vgmstream.fyplugin --format=zip linux-x64 windows-x64 licenses COPYING README.md
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: fooyin-plugin-vgmstream-all
+          path: fooyin-vgmstream.fyplugin
+          if-no-files-found: error
+
+  attach:
+    name: Attach to release
+    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    needs: [bundle]
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: fooyin-plugin-vgmstream-linux
+          path: ./artifacts
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: fooyin-plugin-vgmstream-windows
+          path: ./artifacts
+
+      - name: Download combined artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: fooyin-plugin-vgmstream-all
+          path: ./artifacts
+
       - name: Upload Linux artifact to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.event.release.tag_name }}
-          file: ./artifacts/fyplugin_vgmstream.so
+          file: ./artifacts/fooyin-vgmstream-linux-x64.fyplugin
           overwrite: true
 
       - name: Upload Windows artifact to release
@@ -228,5 +242,13 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.event.release.tag_name }}
-          file: ./artifacts/fyplugin_vgmstream.dll
+          file: ./artifacts/fooyin-vgmstream-windows-x64.fyplugin
+          overwrite: true
+
+      - name: Upload combined artifact to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.event.release.tag_name }}
+          file: ./artifacts/fooyin-vgmstream.fyplugin
           overwrite: true

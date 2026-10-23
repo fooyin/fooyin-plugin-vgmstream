@@ -4,16 +4,17 @@ An input plugin for [fooyin](https://www.fooyin.org/) that uses [VGMStream](http
 
 ## Installation
 
-Pre-built Linux binaries are available from the project's [GitHub releases](https://github.com/fooyin/fooyin-plugin-vgmstream/releases).
-Download `fyplugin_vgmstream.so` and either install it from the `Plugins` settings page 
-or place it in fooyin's plugin directory (`~/.local/lib/fooyin/plugins`), then restart fooyin.
+Pre-built Linux and Windows plugin bundles are available from the project's
+[GitHub releases](https://github.com/fooyin/fooyin-plugin-vgmstream/releases). 
+Download `fooyin-vgmstream.fyplugin` for both Linux x64 and Windows x64, or choose the smaller Linux or Windows bundle. 
+Install it from the `Plugins` settings page, then restart fooyin.
 
 ## Building from source
 
 You will need:
 
 - A C++ compiler with C++23 support
-- CMake 3.14 or later
+- CMake 3.19 or later
 - fooyin, including its CMake development files
 - VGMStream (optional)
 
